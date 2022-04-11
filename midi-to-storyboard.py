@@ -157,6 +157,7 @@ def main():
     pathToHitsoundBank = None
     pathToMappingToolsJson = None
     pathToMidi = None
+    pathToFile = None
     pathToOutput = None
     pathToBeatmap = None
     octaveShift = 0
@@ -166,8 +167,10 @@ def main():
             ext = path.splitext(a)[1].lower()
             if ext == '.mid':
                 pathToMidi = a
+                pathToFile = a
             elif ext == '.json':
                 pathToMappingToolsJson = a
+                pathToFile = a
             else:
                 assert False, "Unsupported input"
         elif o in ("-h", "--hitsounds"):
@@ -181,17 +184,13 @@ def main():
         else:
             assert False, "unhandled option"
 
-    if pathToHitsoundBank is None or (pathToMappingToolsJson is None and pathToMidi is None):
+    if pathToHitsoundBank is None or pathToFile is None:
         print("missing options")
         sys.exit(2)
 
     rootDir = path.dirname(path.abspath(__file__))
-    outDir = path.join(rootDir, 'output')
-
     midiKeyMap = createMidiKeyMap()
     keyToFileMap = createOrGetKeyToFileMap(midiKeyMap, pathToHitsoundBank)
-    hitsoundGenerator = getHitsoundGenerator(
-        midiKeyMap, keyToFileMap, octaveShift, outDir)
 
     samples = {}
     if pathToMappingToolsJson is not None:
@@ -202,6 +201,14 @@ def main():
     if not samples:
         print("No samples generated")
         sys.exit(0)
+
+    head, tail = path.split(pathToFile)
+    filename, ext = path.splitext(tail)
+    outDir = path.join(rootDir, 'output')
+    outDir = path.join(outDir, "{}-{}".format(filename, ext[1:]))
+
+    hitsoundGenerator = getHitsoundGenerator(
+        midiKeyMap, keyToFileMap, octaveShift, outDir)
 
     writeStoryboard(outDir,
                     samples, hitsoundGenerator, offset)
