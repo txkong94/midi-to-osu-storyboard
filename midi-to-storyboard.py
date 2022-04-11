@@ -30,8 +30,8 @@ def createKeyToFileMap(midiKeyMap, pathToHitsoundBank):
 
 def main():
     try:
-        opts, args = getopt.getopt(sys.argv[1:], "i:vb:v", [
-                                   "input=", "bank="])
+        opts, args = getopt.getopt(sys.argv[1:], "i:vb:vs:v", [
+                                   "input=", "bank=", "shift="])
     except getopt.GetoptError as err:
         print(err)  # will print something like "option -a not recognized"
         sys.exit(2)
@@ -39,6 +39,7 @@ def main():
     pathToHitsoundBank = None
     pathToMappingToolsJson = None
     pathToOutput = None
+    octaveShift = 0
 
     for o, a in opts:
         if o in ("-i", "--input"):
@@ -46,6 +47,8 @@ def main():
 
         elif o in ("-b", "--bank"):
             pathToHitsoundBank = a
+        elif o in ("-s, --shift"):
+            octaveShift = int(a)
         else:
             assert False, "unhandled option"
 
@@ -62,7 +65,8 @@ def main():
     makedirs(outDir)
     midiKeyMap = createMidiKeyMap()
     keyToFileMap = createKeyToFileMap(midiKeyMap, pathToHitsoundBank)
-    hitsoundGenerator = getHitsoundGenerator(midiKeyMap, keyToFileMap, outDir)
+    hitsoundGenerator = getHitsoundGenerator(
+        midiKeyMap, keyToFileMap, octaveShift, outDir)
     fileName = path.basename(pathToMappingToolsJson)
     with open(pathToMappingToolsJson, 'r', encoding='utf-8') as f:
         data = json.load(f)
@@ -72,6 +76,8 @@ def main():
             keyFile = keyToFileMap[key]
             # If we don't have audio for note, we skip
             if keyFile == "":
+                print("Missing file for: key = {}, note = {}".format(
+                    key, midiKeyMap[key]))
                 continue
             newHitsoundPath = hitsoundGenerator(key, length)
             hitsoundLayer["SampleArgs"]["Path"] = newHitsoundPath
@@ -79,13 +85,15 @@ def main():
             outfile.write(json.dumps(data))
 
 
-def getHitsoundGenerator(midiKeyMap, keyToFileMap, outDir):
+def getHitsoundGenerator(midiKeyMap, keyToFileMap, octaveShift, outDir):
     generatedHitsounds = set()
     fadeOutTime = 300  # ms
 
     def generateHitsound(key, length):
+        key = key+octaveShift*12
         intLength = int(length) + fadeOutTime  # ms
-        newHitsoundName = "{}-{}.ogg".format(midiKeyMap[key], str(intLength))
+        newHitsoundName = "{}-{}.ogg".format(
+            midiKeyMap[key], str(intLength))
         newHitsoundPath = path.join(outDir, newHitsoundName)
         if newHitsoundName in generatedHitsounds:
             return newHitsoundName
