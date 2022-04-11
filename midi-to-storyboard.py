@@ -6,6 +6,8 @@ from pydub.silence import detect_leading_silence
 import sys
 import getopt
 import pprint
+import mido
+import math
 
 
 def createMidiKeyMap():
@@ -25,7 +27,9 @@ def createOrGetKeyToFileMap(midiKeyMap, pathToHitsoundBank):
         pathToHitsoundBank, 'hitsoundbank.json')
     if(path.isfile(hitsoundBankPath)):
         with open(hitsoundBankPath, 'r', encoding='utf-8') as f:
-            keyToFileMap = json.loads(f)
+            keyToFileMap = json.load(
+                f, object_hook=lambda x: {int(k): v for k, v in x.items()})
+            # pprint.pprint(keyToFileMap)
             return keyToFileMap
 
     filenames = next(walk(pathToHitsoundBank), (None, None, []))[
@@ -80,14 +84,54 @@ def readMappingToolsJson(pathToJson):
             length = int(hitsoundLayer["SampleArgs"]["Length"])
             times = hitsoundLayer["Times"]
             samples[(key, length)] = [int(time) for time in times]
+    # print(sorted(samples, key=lambda key: (key[0], key[1])))
+    # print(len(samples.keys()))
     return samples
+
+# Same implementation as Mapping Tools
+# https://github.com/OliBomby/Mapping_Tools/blob/master/Mapping_Tools/Classes/HitsoundStuff/HitsoundImporter.cs
+# RoundLength
+
+
+def roundLength(length, roughness=1):
+    roughPow = math.pow(length, 1 / roughness)
+    roughRound = math.ceil(roughPow)
+    return round(math.pow(roughRound, roughness))
 
 
 def readMidi(pathToMidi):
-    return
+    mid = mido.MidiFile(pathToMidi)
+    ticksPerBeat = mid.ticks_per_beat
+    samples: dict = {}
+    for i, track in enumerate(mid.tracks):
+        trackTempo = 0
+        cumulativeTime = 0
+        noteOnDict = {}
+        for msg in track:
+            cumulativeTime += msg.time
+            if msg.is_meta:
+                if msg.type == 'set_tempo':
+                    trackTempo = msg.dict()['tempo']
+            elif msg.type == 'note_on' and msg.velocity != 0:
+                noteOnDict[msg.note] = cumulativeTime
+            elif msg.type == 'note_off' or (msg.type == 'note_on' and msg.velocity == 0):
+                noteStart = noteOnDict.pop(msg.note)
+                noteLength = cumulativeTime - noteStart
+                if noteLength != 0:
+                    msNoteLength = mido.tick2second(
+                        noteLength, ticksPerBeat, trackTempo) * 1000
+                    key = (msg.note, roundLength(msNoteLength))
+                    samples.setdefault(key, []).append(noteStart)
+    # print(sorted(samples, key=lambda key: (key[0], key[1])))
+    # print(len(samples.keys()))
+    return samples
 
 
-def writeStoryboard(outDir, samples, hitsoundGenerator):
+def writeStoryboard(outDir, samples, hitsoundGenerator, offset=0, volume=40):
+    if path.exists(outDir):
+        rmtree(outDir)
+    makedirs(outDir)
+
     with open(path.join(outDir, "storyboard.osb"), 'w', encoding='utf-8') as outfile:
         lines = []
         for sample in samples.items():
@@ -95,73 +139,72 @@ def writeStoryboard(outDir, samples, hitsoundGenerator):
             times = sample[1]
             hitsoundName, hitsoundPath = hitsoundGenerator(key, length)
             for time in times:
-                lines.append((time, hitsoundName))
+                lines.append((time + offset, hitsoundName))
         lines.sort(key=lambda line: line[0])
         for line in lines:
-            outfile.write("Sample,{},0,\"{}\",40\n".format(
-                line[0], line[1]))
+            outfile.write("Sample,{},0,\"{}\",{}\n".format(
+                line[0], line[1], volume))
 
 
 def main():
     try:
-        opts, args = getopt.getopt(sys.argv[1:], "i:vb:vs:v", [
-            "input=", "bank=", "shift="])
+        opts, args = getopt.getopt(sys.argv[1:], "i:vh:vb:vs:vo:v", [
+            "input=", "hitsounds=", "shift=", "offset=", "beatmap="])
     except getopt.GetoptError as err:
         print(err)  # will print something like "option -a not recognized"
         sys.exit(2)
 
     pathToHitsoundBank = None
     pathToMappingToolsJson = None
+    pathToMidi = None
     pathToOutput = None
+    pathToBeatmap = None
     octaveShift = 0
-
+    offset = 0
     for o, a in opts:
         if o in ("-i", "--input"):
-            pathToMappingToolsJson = a
-
-        elif o in ("-b", "--bank"):
+            ext = path.splitext(a)[1].lower()
+            if ext == '.mid':
+                pathToMidi = a
+            elif ext == '.json':
+                pathToMappingToolsJson = a
+            else:
+                assert False, "Unsupported input"
+        elif o in ("-h", "--hitsounds"):
             pathToHitsoundBank = a
-        elif o in ("-s, --shift"):
+        elif o in ("-b", "--beatmap"):
+            pathToBeatmap = a
+        elif o in ("-s", "--shift"):
             octaveShift = int(a)
+        elif o in ("-o", "--offset"):
+            offset = int(a)
         else:
             assert False, "unhandled option"
 
-    if pathToHitsoundBank is None or pathToMappingToolsJson is None:
+    if pathToHitsoundBank is None or (pathToMappingToolsJson is None and pathToMidi is None):
         print("missing options")
         sys.exit(2)
 
     rootDir = path.dirname(path.abspath(__file__))
     outDir = path.join(rootDir, 'output')
 
-    if path.exists(outDir):
-        rmtree(outDir)
-
-    makedirs(outDir)
     midiKeyMap = createMidiKeyMap()
     keyToFileMap = createOrGetKeyToFileMap(midiKeyMap, pathToHitsoundBank)
     hitsoundGenerator = getHitsoundGenerator(
         midiKeyMap, keyToFileMap, octaveShift, outDir)
-    fileName = path.basename(pathToMappingToolsJson)
 
-    samples = readMappingToolsJson(pathToMappingToolsJson)
+    samples = {}
+    if pathToMappingToolsJson is not None:
+        samples = readMappingToolsJson(pathToMappingToolsJson)
+    elif pathToMidi is not None:
+        samples = readMidi(pathToMidi)
+
+    if not samples:
+        print("No samples generated")
+        sys.exit(0)
+
     writeStoryboard(outDir,
-                    samples, hitsoundGenerator)
-    sys.exit(0)
-    with open(pathToMappingToolsJson, 'r', encoding='utf-8') as f:
-        data = json.load(f)
-        for hitsoundLayer in data["HitsoundLayers"]:
-            key = hitsoundLayer["SampleArgs"]["Key"]
-            length = hitsoundLayer["SampleArgs"]["Length"]
-            keyFile = keyToFileMap[key]
-            # If we don't have audio for note, we skip
-            if keyFile == "":
-                print("Missing file for: key = {}, note = {}".format(
-                    key, midiKeyMap[key]))
-                continue
-            newHitsoundPath = hitsoundGenerator(key, length)
-            hitsoundLayer["SampleArgs"]["Path"] = newHitsoundPath
-        with open(path.join(outDir, fileName), 'w', encoding='utf-8') as outfile:
-            outfile.write(json.dumps(data))
+                    samples, hitsoundGenerator, offset)
 
 
 if __name__ == "__main__":
