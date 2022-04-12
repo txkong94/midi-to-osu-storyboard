@@ -40,10 +40,10 @@ create-sound-bank.py -i [wav file from step 4] -n [soundbank name] -s [first not
 ```
 Examples
 ```
-create-sound-bank.py -i "machinegun.wav" -n machinegun -s "A0" -e "C8"
+create-sound-bank.py -i "machinegun.wav" -n "machinegun" -s "A0" -e "C8"
 ```
 
 ```
-create-sound-bank.py -i "harp.wav" -n machinegun -s 21 -e 100
+create-sound-bank.py -i "harp.wav" -n "harp" -s 21 -e 100
 ```
 
