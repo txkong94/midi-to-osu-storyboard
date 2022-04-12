@@ -1,7 +1,7 @@
 import json
 from os import walk, path, makedirs
 from shutil import rmtree
-from pydub import AudioSegment
+from pydub import AudioSegment, effects
 from pydub.silence import detect_leading_silence
 import sys
 import getopt
@@ -63,12 +63,16 @@ def getHitsoundGenerator(midiKeyMap, keyToFileMap, octaveShift, outDir):
         if newHitsoundName in generatedHitsounds:
             return newHitsoundName
         fileExt = keyFile.split(".")[-1]
-        sourceHitsound = AudioSegment.from_file(
-            keyFile, format=fileExt)
-        newHitsound = sourceHitsound[detect_leading_silence(
-            sourceHitsound):intLength]
-        newHitsound = newHitsound.fade_out(fadeOutTime)
-        newHitsound.export(newHitsoundPath, format="ogg")
+        try:
+            sourceHitsound = AudioSegment.from_file(
+                keyFile, format=fileExt)
+            newHitsound = sourceHitsound[detect_leading_silence(
+                sourceHitsound):intLength]
+            newHitsound = newHitsound.fade_out(fadeOutTime)
+            out = effects.normalize(newHitsound).export(
+                newHitsoundPath, format="ogg")
+        finally:
+            out.close()
         generatedHitsounds.add(newHitsoundName)
         return (newHitsoundName, newHitsoundPath)
 
@@ -127,7 +131,7 @@ def readMidi(pathToMidi):
     return samples
 
 
-def writeStoryboard(outDir, samples, hitsoundGenerator, offset=0, volume=40):
+def writeStoryboard(outDir, samples, hitsoundGenerator, offset=0, volume=100):
     if path.exists(outDir):
         rmtree(outDir)
     makedirs(outDir)
@@ -148,8 +152,8 @@ def writeStoryboard(outDir, samples, hitsoundGenerator, offset=0, volume=40):
 
 def main():
     try:
-        opts, args = getopt.getopt(sys.argv[1:], "i:vh:vb:vs:vo:v", [
-            "input=", "hitsounds=", "shift=", "offset=", "beatmap="])
+        opts, args = getopt.getopt(sys.argv[1:], "i:vh:vb:vs:vo:vv:v", [
+            "input=", "hitsounds=", "shift=", "offset=", "beatmap=", "volume="])
     except getopt.GetoptError as err:
         print(err)  # will print something like "option -a not recognized"
         sys.exit(2)
@@ -162,6 +166,7 @@ def main():
     pathToBeatmap = None
     octaveShift = 0
     offset = 0
+    volume = 100
     for o, a in opts:
         if o in ("-i", "--input"):
             ext = path.splitext(a)[1].lower()
@@ -181,6 +186,8 @@ def main():
             octaveShift = int(a)
         elif o in ("-o", "--offset"):
             offset = int(a)
+        elif o in ("-v", "--volume"):
+            volume = int(a)
         else:
             assert False, "unhandled option"
 
@@ -211,7 +218,7 @@ def main():
         midiKeyMap, keyToFileMap, octaveShift, outDir)
 
     writeStoryboard(outDir,
-                    samples, hitsoundGenerator, offset)
+                    samples, hitsoundGenerator, offset, volume)
 
 
 if __name__ == "__main__":
