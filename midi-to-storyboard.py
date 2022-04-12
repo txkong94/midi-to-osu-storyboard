@@ -152,7 +152,7 @@ def writeStoryboard(outDir, samples, hitsoundGenerator, offset=0, volume=100):
 
 def main():
     try:
-        opts, args = getopt.getopt(sys.argv[1:], "i:vh:vb:vs:vo:vv:v", [
+        opts, args = getopt.getopt(sys.argv[1:], "i:h:b:s:o:v:", [
             "input=", "hitsounds=", "shift=", "offset=", "beatmap=", "volume="])
     except getopt.GetoptError as err:
         print(err)  # will print something like "option -a not recognized"
