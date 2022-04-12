@@ -44,7 +44,7 @@ def createOrGetKeyToFileMap(midiKeyMap, pathToHitsoundBank):
 
 def getHitsoundGenerator(midiKeyMap, keyToFileMap, octaveShift, outDir):
     generatedHitsounds = set()
-    fadeOutTime = 300  # ms
+    fadeOutTime = 200  # ms
 
     def generateHitsound(key, length):
         key = key+octaveShift*12
@@ -56,19 +56,21 @@ def getHitsoundGenerator(midiKeyMap, keyToFileMap, octaveShift, outDir):
                 key, midiKeyMap[key]))
             return ("", "")
 
-        intLength = int(length) + fadeOutTime  # ms
+        intLengthWithTail = int(length) + 100  # ms
         newHitsoundName = "{}-{}.ogg".format(
-            midiKeyMap[key], str(intLength))
+            midiKeyMap[key], str(length))
         newHitsoundPath = path.join(outDir, newHitsoundName)
         if newHitsoundName in generatedHitsounds:
             return newHitsoundName
         fileExt = keyFile.split(".")[-1]
+
+        sourceHitsound = AudioSegment.from_file(
+            keyFile, format=fileExt)
+        newHitsound = sourceHitsound[detect_leading_silence(
+            sourceHitsound):intLengthWithTail]
+        newHitsound = newHitsound.fade_out(
+            min(int(len(newHitsound) * 0.20), fadeOutTime))
         try:
-            sourceHitsound = AudioSegment.from_file(
-                keyFile, format=fileExt)
-            newHitsound = sourceHitsound[detect_leading_silence(
-                sourceHitsound):intLength]
-            newHitsound = newHitsound.fade_out(fadeOutTime)
             out = effects.normalize(newHitsound).export(
                 newHitsoundPath, format="ogg")
         finally:
