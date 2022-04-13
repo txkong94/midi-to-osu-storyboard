@@ -110,7 +110,7 @@ def readMidi(pathToMidi):
     ticksPerBeat = mid.ticks_per_beat
     samples: dict = {}
     for i, track in enumerate(mid.tracks):
-        trackTempo = 0
+        trackTempo = 500000  # Default: 120bpm
         cumulativeTime = 0
         noteOnDict = {}
         for msg in track:
