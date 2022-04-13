@@ -167,6 +167,7 @@ def writeStoryboard(baseMap, outDir, storyboardLines):
                         if k == "Version":
                             v = "Hitsounds"
                         metadata[k] = v
+                        line = "{}:{}\n".format(k, v)
                     elif mode == "soundsamples":
                         line = file.readline()
                         continue  # skip existing sound samples
