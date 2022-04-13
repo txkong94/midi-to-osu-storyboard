@@ -4,6 +4,8 @@ import os
 import sys
 import getopt
 import json
+import math
+import pprint
 from shutil import rmtree
 
 
@@ -60,7 +62,6 @@ def main():
 
     midiKeyToNoteMap = createMidiKeyToNoteMap()
     noteToMidiKeyMap = createNoteToMidiKeyMap()
-
     rootDir = os.path.dirname(os.path.abspath(__file__))
     outDir = os.path.join(rootDir, 'soundbanks', nameOfSoundBank)
     fileExt = pathToInput.split(".")[-1]
@@ -73,35 +74,30 @@ def main():
     sourceSounds = AudioSegment.from_file(
         pathToInput, format=fileExt)
 
-    # noteChunks = split_on_silence(
-    #     sourceSounds, min_silence_len=3000, silence_thresh=-60)
-
     if os.path.exists(outDir):
         rmtree(outDir)
     os.makedirs(outDir)
 
-    index = 0
     twoSecondsInMs = 2000
     fiveSecondsInMs = 5000
     currentTime = 0
     hitsoundBankDict = {}
     for key in range(21, 128):
         dictValue = ''
-        if key in range(startKey, endKey+1):
+        startTime = currentTime
+        endTime = currentTime+twoSecondsInMs
+        newNote = sourceSounds[startTime:endTime]
+        if not math.isinf(newNote.dBFS):
             dictValue = os.path.join(
                 outDir, "{}.ogg".format(midiKeyToNoteMap[key]))
-            startTime = currentTime
-            endTime = currentTime+twoSecondsInMs
             try:
-                newNote = sourceSounds[startTime:endTime]
                 out = effects.normalize(newNote).export(
                     dictValue, format="ogg")
             finally:
                 out.close()
         hitsoundBankDict[key] = dictValue
-        index += 1
         currentTime += twoSecondsInMs + fiveSecondsInMs
-
+    pprint.pprint(hitsoundBankDict)
     with open(os.path.join(outDir, 'hitsoundbank.json'), 'w', encoding='utf-8') as outfile:
         outfile.write(json.dumps(hitsoundBankDict))
 

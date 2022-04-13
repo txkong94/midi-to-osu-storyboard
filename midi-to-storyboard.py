@@ -133,23 +133,56 @@ def readMidi(pathToMidi):
     return samples
 
 
-def writeStoryboard(outDir, samples, hitsoundGenerator, offset=0, volume=100):
-    if path.exists(outDir):
-        rmtree(outDir)
-    makedirs(outDir)
+def createStoryboardLines(samples, hitsoundGenerator, offset=0, volume=100):
+    lines = []
+    for sample in samples.items():
+        key, length = sample[0]
+        times = sample[1]
+        hitsoundName, hitsoundPath = hitsoundGenerator(key, length)
+        for time in times:
+            lines.append((time + offset, hitsoundName))
+    lines.sort(key=lambda line: line[0])
+    return ["Sample,{},0,\"{}\",{}\n".format(
+            line[0], line[1], volume) for line in lines]
 
-    with open(path.join(outDir, "storyboard.osb"), 'w', encoding='utf-8') as outfile:
+
+def writeStoryboard(baseMap, outDir, storyboardLines):
+    if path.isfile(baseMap):
         lines = []
-        for sample in samples.items():
-            key, length = sample[0]
-            times = sample[1]
-            hitsoundName, hitsoundPath = hitsoundGenerator(key, length)
-            for time in times:
-                lines.append((time + offset, hitsoundName))
-        lines.sort(key=lambda line: line[0])
-        for line in lines:
-            outfile.write("Sample,{},0,\"{}\",{}\n".format(
-                line[0], line[1], volume))
+        metadata = {}
+        with open(baseMap, 'r', encoding="utf-8") as file:
+            mode = ''
+            line = file.readline()
+            while line:
+                stripped = line.strip()
+                if stripped == "[Metadata]":
+                    mode = "metadata"
+                elif stripped == "//Storyboard Sound Samples":
+                    mode = "soundsamples"
+                elif not stripped:
+                    mode = ""
+                else:
+                    if mode == "metadata":
+                        k, v = stripped.split(':', 1)
+                        if k == "Version":
+                            v = "Hitsounds"
+                        metadata[k] = v
+                    elif mode == "soundsamples":
+                        line = file.readline()
+                        continue  # skip existing sound samples
+                lines.append(line)
+                line = file.readline()
+        if lines is None:
+            print("ops")
+            return
+
+        outFile = "{} - {} ({}) [{}].osu".format(metadata['Artist'],
+                                                 metadata['Title'], metadata['Creator'], metadata['Version'])
+        with open(path.join(outDir, outFile), 'w', encoding="utf-8") as file:
+            for line in lines:
+                file.write(line)
+                if line.strip() == "//Storyboard Sound Samples":
+                    file.writelines(storyboardLines)
 
 
 def main():
@@ -193,7 +226,7 @@ def main():
         else:
             assert False, "unhandled option"
 
-    if pathToHitsoundBank is None or pathToFile is None:
+    if pathToHitsoundBank is None or pathToFile is None or pathToBeatmap is None:
         print("missing options")
         sys.exit(2)
 
@@ -219,8 +252,12 @@ def main():
     hitsoundGenerator = getHitsoundGenerator(
         midiKeyMap, keyToFileMap, octaveShift, outDir)
 
-    writeStoryboard(outDir,
-                    samples, hitsoundGenerator, offset, volume)
+    if path.exists(outDir):
+        rmtree(outDir)
+    makedirs(outDir)
+    storyboardLines = createStoryboardLines(
+        samples, hitsoundGenerator, offset, volume)
+    writeStoryboard(pathToBeatmap, outDir, storyboardLines)
 
 
 if __name__ == "__main__":

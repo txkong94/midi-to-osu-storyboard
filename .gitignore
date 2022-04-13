@@ -3,6 +3,7 @@ output/
 soundbanks/
 notes.mid
 tempCodeRunnerFile.py
+*.osu
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
