@@ -109,26 +109,30 @@ def readMidi(pathToMidi):
     mid = mido.MidiFile(pathToMidi)
     ticksPerBeat = mid.ticks_per_beat
     samples: dict = {}
+    # Default: 120bpm [2922-04-15] TIL: This is global and is a message on the first track only.
+    trackTempo = 500000
     for i, track in enumerate(mid.tracks):
-        trackTempo = 500000  # Default: 120bpm
-        cumulativeTime = 0
+        cumulativeTicks = 0
         noteOnDict = {}
         for msg in track:
-            cumulativeTime += msg.time
+            cumulativeTicks += msg.time
             if msg.is_meta:
                 if msg.type == 'set_tempo':
                     trackTempo = msg.dict()['tempo']
             elif msg.type == 'note_on' and msg.velocity != 0:
-                noteOnDict[msg.note] = cumulativeTime
+                noteOnDict[msg.note] = cumulativeTicks
             elif msg.type == 'note_off' or (msg.type == 'note_on' and msg.velocity == 0):
                 noteStart = noteOnDict.pop(msg.note)
-                noteLength = cumulativeTime - noteStart
+                noteLength = cumulativeTicks - noteStart
                 if noteLength != 0:
                     msNoteLength = mido.tick2second(
                         noteLength, ticksPerBeat, trackTempo) * 1000
+                    msNoteStart = mido.tick2second(
+                        noteStart, ticksPerBeat, trackTempo) * 1000
                     key = (msg.note, roundLength(msNoteLength))
-                    samples.setdefault(key, []).append(noteStart)
+                    samples.setdefault(key, []).append(int(msNoteStart))
     # print(sorted(samples, key=lambda key: (key[0], key[1])))
+    # print(samples)
     # print(len(samples.keys()))
     return samples
 
@@ -146,7 +150,7 @@ def createStoryboardLines(samples, hitsoundGenerator, offset=0, volume=100):
             line[0], line[1], volume) for line in lines]
 
 
-def writeStoryboard(baseMap, outDir, storyboardLines):
+def writeStoryboard(baseMap, outDir, diffName, storyboardLines):
     if path.isfile(baseMap):
         lines = []
         metadata = {}
@@ -165,7 +169,7 @@ def writeStoryboard(baseMap, outDir, storyboardLines):
                     if mode == "metadata":
                         k, v = stripped.split(':', 1)
                         if k == "Version":
-                            v = "Hitsounds"
+                            v = diffName
                         metadata[k] = v
                         line = "{}:{}\n".format(k, v)
                     elif mode == "soundsamples":
@@ -188,8 +192,8 @@ def writeStoryboard(baseMap, outDir, storyboardLines):
 
 def main():
     try:
-        opts, args = getopt.getopt(sys.argv[1:], "i:h:b:s:o:v:", [
-            "input=", "hitsounds=", "shift=", "offset=", "beatmap=", "volume="])
+        opts, args = getopt.getopt(sys.argv[1:], "i:h:b:s:o:v:n:", [
+            "input=", "hitsounds=", "shift=", "offset=", "beatmap=", "volume=", "name="])
     except getopt.GetoptError as err:
         print(err)  # will print something like "option -a not recognized"
         sys.exit(2)
@@ -200,6 +204,7 @@ def main():
     pathToFile = None
     pathToOutput = None
     pathToBeatmap = None
+    diffName = "Hitsounds"
     octaveShift = 0
     offset = 0
     volume = 100
@@ -224,6 +229,8 @@ def main():
             offset = int(a)
         elif o in ("-v", "--volume"):
             volume = int(a)
+        elif o in ("-n", "--name"):
+            diffName = a
         else:
             assert False, "unhandled option"
 
@@ -258,7 +265,7 @@ def main():
     makedirs(outDir)
     storyboardLines = createStoryboardLines(
         samples, hitsoundGenerator, offset, volume)
-    writeStoryboard(pathToBeatmap, outDir, storyboardLines)
+    writeStoryboard(pathToBeatmap, outDir, diffName, storyboardLines)
 
 
 if __name__ == "__main__":
