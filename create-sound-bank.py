@@ -34,25 +34,22 @@ def createNoteToMidiKeyMap():
 
 def main():
     try:
-        opts, args = getopt.getopt(sys.argv[1:], "i:vn:vs:ve:v", [
-            "input=", "name=", "start=", "end="])
+        opts, args = getopt.getopt(sys.argv[1:], "i:n:p:", [
+            "input=", "name=", "padding="])
     except getopt.GetoptError as err:
         print(err)  # will print something like "option -a not recognized"
         sys.exit(2)
 
     pathToInput = None
     nameOfSoundBank = None
-    start = 21
-    end = 88
+    padding = 0  # ms
     for o, a in opts:
         if o in ("-i", "--input"):
             pathToInput = a
         elif o in ("-n", "--name"):
             nameOfSoundBank = a
-        elif o in ("-s", "--start"):
-            start = a
-        elif o in ("-e", "--end"):
-            end = a
+        elif o in ("-p", "--padding"):
+            padding = int(a)
         else:
             assert False, "unhandled option"
 
@@ -65,11 +62,6 @@ def main():
     rootDir = os.path.dirname(os.path.abspath(__file__))
     outDir = os.path.join(rootDir, 'soundbanks', nameOfSoundBank)
     fileExt = pathToInput.split(".")[-1]
-
-    startKey = noteToMidiKeyMap[start] if start in noteToMidiKeyMap else int(
-        start)
-    endKey = noteToMidiKeyMap[end] if end in noteToMidiKeyMap else int(
-        end)
 
     sourceSounds = AudioSegment.from_file(
         pathToInput, format=fileExt)
@@ -85,7 +77,7 @@ def main():
     for key in range(21, 128):
         dictValue = ''
         startTime = currentTime
-        endTime = currentTime+twoSecondsInMs
+        endTime = currentTime+twoSecondsInMs + padding
         newNote = sourceSounds[startTime:endTime]
         if not math.isinf(newNote.dBFS):
             dictValue = os.path.join(

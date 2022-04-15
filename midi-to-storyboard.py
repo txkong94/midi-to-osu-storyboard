@@ -42,9 +42,8 @@ def createOrGetKeyToFileMap(midiKeyMap, pathToHitsoundBank):
     return keyToFileMap
 
 
-def getHitsoundGenerator(midiKeyMap, keyToFileMap, octaveShift, outDir):
+def getHitsoundGenerator(midiKeyMap, keyToFileMap, octaveShift, outDir, padding=300, fade=300):
     generatedHitsounds = set()
-    fadeOutTime = 200  # ms
 
     def generateHitsound(key, length):
         key = key+octaveShift*12
@@ -56,7 +55,7 @@ def getHitsoundGenerator(midiKeyMap, keyToFileMap, octaveShift, outDir):
                 key, midiKeyMap[key]))
             return ("", "")
 
-        intLengthWithPadding = int(length) + 100  # ms
+        intLengthWithPadding = int(length) + padding  # ms
         newHitsoundName = "{}-{}.ogg".format(
             midiKeyMap[key], str(length))
         newHitsoundPath = path.join(outDir, newHitsoundName)
@@ -68,8 +67,8 @@ def getHitsoundGenerator(midiKeyMap, keyToFileMap, octaveShift, outDir):
             keyFile, format=fileExt)
         newHitsound = sourceHitsound[detect_leading_silence(
             sourceHitsound):intLengthWithPadding]
-        newHitsound = newHitsound.fade_out(
-            min(int(len(newHitsound) * 0.20), fadeOutTime))
+        newHitsound = newHitsound.fade_out(fade)
+        # min(int(len(newHitsound) * 0.20), fade))
         try:
             out = effects.normalize(newHitsound).export(
                 newHitsoundPath, format="ogg")
@@ -100,6 +99,8 @@ def readMappingToolsJson(pathToJson):
 
 
 def roundLength(length, roughness=1):
+    if roughness == 0:
+        return round(length)
     roughPow = math.pow(length, 1 / roughness)
     roughRound = math.ceil(roughPow)
     return round(math.pow(roughRound, roughness))
